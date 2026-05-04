@@ -69,7 +69,7 @@
   <script src="app.js"></script>
   
   <script>
-    // Gunakan nama 'db' agar tidak bentrok dengan app.js
+    // Inisialisasi Supabase (nama 'db' agar tidak bentrok dengan app.js)
     const db = window.supabase.createClient(
       'https://ogrboadxaeymeqsksdau.supabase.co',
       'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9ncmJvYWR4YWV5bWVxc2tzZGF1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU4NzczNDAsImV4cCI6MjA5MTQ1MzM0MH0.liLIar3JdLuYq2ni0ANKHL4z0MJ8mP01MVS9eEt3EoU'
@@ -80,33 +80,37 @@
   
     document.addEventListener('DOMContentLoaded', async () => {
       try {
-        // 1. Cek Login
-        const {  { session } } = await db.auth.getSession();
+        // 1. Cek Sesi Login
+        const authRes = await db.auth.getSession();
+        const session = authRes.data?.session;
         if (!session) return window.location.href = 'index.html';
   
-        // 2. Tampilkan Profil
-        const {  profile } = await db.from('users_profile').select('nama_lengkap, role').eq('id', session.user.id).single();
-        if (profile) document.getElementById('userInfo').innerHTML = `<strong>${profile.nama_lengkap}</strong><br><small>${profile.role}</small>`;
+        // 2. Tampilkan Profil User
+        const profileRes = await db.from('users_profile').select('nama_lengkap, role').eq('id', session.user.id).single();
+        const profile = profileRes.data;
+        if (profile) {
+          document.getElementById('userInfo').innerHTML = `<strong>${profile.nama_lengkap}</strong><br><small>${profile.role}</small>`;
+        }
   
-        // 3. Load Referensi
-        const {  refData, error: refErr } = await db.from('ref_master').select('kategori, kode_asli, label');
-        if (refErr) throw new Error('Gagal load ref_master: ' + refErr.message);
+        // 3. Load Master Referensi (Kode Angka -> Teks)
+        const refRes = await db.from('ref_master').select('kategori, kode_asli, label');
+        if (refRes.error) throw new Error('Gagal load referensi: ' + refRes.error.message);
         
-        refData.forEach(r => {
+        refRes.data.forEach(r => {
           if (!refMap[r.kategori]) refMap[r.kategori] = {};
           refMap[r.kategori][r.kode_asli] = r.label;
         });
   
         // 4. Load Data Warga
-        const {  warga, error: wargaErr } = await db
+        const wargaRes = await db
           .from('warga')
           .select('nik, nama_lengkap, jenis_kelamin_id, agama_id, pekerjaan_id, status_perkawinan_id, status_dasar_id, alamat, rt, rw')
           .order('created_at', { ascending: false })
           .limit(100);
   
-        if (wargaErr) throw new Error('Gagal load warga: ' + wargaErr.message);
+        if (wargaRes.error) throw new Error('Gagal load warga: ' + wargaRes.error.message);
   
-        wargaList = warga || [];
+        wargaList = wargaRes.data || [];
         renderTable(wargaList);
   
       } catch (err) {
@@ -143,6 +147,7 @@
       `).join('');
     }
   
+    // Fitur Pencarian Real-time
     document.getElementById('searchInput').addEventListener('input', e => {
       const q = e.target.value.toLowerCase();
       const filtered = wargaList.filter(w => 
