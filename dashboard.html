@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dashboard - Aplikasi Desa</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css">
+  <style>
+    body { background: #f8f9fa; }
+    .sidebar { min-height: 100vh; background: #212529; color: white; }
+    .sidebar a { color: rgba(255,255,255,0.8); text-decoration: none; padding: 10px 15px; display: block; }
+    .sidebar a:hover, .sidebar a.active { background: #0d6efd; color: white; border-radius: 4px; }
+    .content { padding: 20px; }
+    .card-stat { border-left: 4px solid #0d6efd; }
+  </style>
+</head>
+<body>
+  <div class="container-fluid">
+    <div class="row">
+      <!-- Sidebar -->
+      <div class="col-md-2 sidebar p-3">
+        <h5 class="mb-4">🏘️ Aplikasi Desa</h5>
+        <nav>
+          <a href="#" class="active"><i class="bi bi-house me-2"></i>Dashboard</a>
+          <a href="#"><i class="bi bi-people me-2"></i>Data Warga</a>
+          <a href="#"><i class="bi bi-file-earmark-text me-2"></i>Surat Menyurat</a>
+          <a href="#"><i class="bi bi-gear me-2"></i>Pengaturan</a>
+        </nav>
+        <hr>
+        <div class="small">
+          <div id="userInfo">Loading...</div>
+          <button class="btn btn-sm btn-outline-light mt-2" onclick="logout()">Logout</button>
+        </div>
+      </div>
+
+      <!-- Main Content -->
+      <div class="col-md-10 content">
+        <h4 class="mb-4">Dashboard</h4>
+        
+        <!-- Stats Cards -->
+        <div class="row mb-4">
+          <div class="col-md-3">
+            <div class="card card-stat p-3">
+              <h6 class="text-muted">Total Warga</h6>
+              <h3 id="totalWarga">-</h3>
+            </div>
+          </div>
+          <div class="col-md-3">
+            <div class="card card-stat p-3" style="border-left-color: #198754;">
+              <h6 class="text-muted">Surat Bulan Ini</h6>
+              <h3 id="suratBulanIni">-</h3>
+            </div>
+          </div>
+        </div>
+
+        <!-- Placeholder Content -->
+        <div class="card">
+          <div class="card-body">
+            <h5 class="card-title">Selamat Datang!</h5>
+            <p class="card-text">Aplikasi siap digunakan. Fitur Data Warga & Surat Menyurat akan segera tersedia.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="app.js"></script>
+  <script>
+    // Proteksi: Redirect ke login jika tidak ada sesi
+    document.addEventListener('DOMContentLoaded', async () => {
+      const {  { session } } = await supabase.auth.getSession();
+      if (!session) {
+        window.location.href = 'index.html';
+        return;
+      }
+
+      // Tampilkan info user
+      const profile = await supabase.from('users_profile').select('nama_lengkap, role').eq('id', session.user.id).single();
+      if (profile.data) {
+        document.getElementById('userInfo').innerHTML = 
+          `<strong>${profile.data.nama_lengkap}</strong><br><small class="text-muted">${profile.data.role}</small>`;
+      }
+
+      // Load statistik sederhana (opsional)
+      const { count } = await supabase.from('warga').select('*', { count: 'exact', head: true });
+      document.getElementById('totalWarga').textContent = count || 0;
+    });
+  </script>
+</body>
+</html>
