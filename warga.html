@@ -69,30 +69,28 @@
   <script src="app.js"></script>
   
   <script>
-    // Inisialisasi Supabase (nama 'db' agar tidak bentrok dengan app.js)
+    // Inisialisasi Supabase
     const db = window.supabase.createClient(
       'https://ogrboadxaeymeqsksdau.supabase.co',
       'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9ncmJvYWR4YWV5bWVxc2tzZGF1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU4NzczNDAsImV4cCI6MjA5MTQ1MzM0MH0.liLIar3JdLuYq2ni0ANKHL4z0MJ8mP01MVS9eEt3EoU'
     );
   
     let refMap = {};
-    let wargaList = [];
   
     document.addEventListener('DOMContentLoaded', async () => {
       try {
-        // 1. Cek Sesi Login
+        // 1. Cek Login
         const authRes = await db.auth.getSession();
         const session = authRes.data?.session;
         if (!session) return window.location.href = 'index.html';
   
-        // 2. Tampilkan Profil User
+        // 2. Profil User
         const profileRes = await db.from('users_profile').select('nama_lengkap, role').eq('id', session.user.id).single();
-        const profile = profileRes.data;
-        if (profile) {
-          document.getElementById('userInfo').innerHTML = `<strong>${profile.nama_lengkap}</strong><br><small>${profile.role}</small>`;
+        if (profileRes.data) {
+          document.getElementById('userInfo').innerHTML = `<strong>${profileRes.data.nama_lengkap}</strong><br><small>${profileRes.data.role}</small>`;
         }
   
-        // 3. Load Master Referensi (Kode Angka -> Teks)
+        // 3. Load Referensi (Kode -> Teks)
         const refRes = await db.from('ref_master').select('kategori, kode_asli, label');
         if (refRes.error) throw new Error('Gagal load referensi: ' + refRes.error.message);
         
@@ -101,33 +99,67 @@
           refMap[r.kategori][r.kode_asli] = r.label;
         });
   
-        // 4. Load Data Warga
-        const wargaRes = await db
-          .from('warga')
-          .select('nik, nama_lengkap, jenis_kelamin_id, agama_id, pekerjaan_id, status_perkawinan_id, status_dasar_id, alamat, rt, rw')
-          .order('created_at', { ascending: false })
-          .limit(100);
+        // 4. Muat Data Awal
+        await loadWarga();
   
-        if (wargaRes.error) throw new Error('Gagal load warga: ' + wargaRes.error.message);
-  
-        wargaList = wargaRes.data || [];
-        renderTable(wargaList);
+        // 5. Setup Pencarian Server-Side + Debounce
+        let searchTimeout;
+        document.getElementById('searchInput').addEventListener('input', (e) => {
+          const keyword = e.target.value.trim();
+          clearTimeout(searchTimeout);
+          searchTimeout = setTimeout(() => searchWarga(keyword), 400); // Tunggu 400ms setelah ketik berhenti
+        });
   
       } catch (err) {
-        console.error('❌ Error:', err);
-        document.getElementById('tableBody').innerHTML = `
-          <tr><td colspan="7" class="text-center text-danger py-4">
-            ️ Gagal memuat data.<br>
-            <small class="text-muted">${err.message}</small><br>
-            <small class="text-muted">Tekan F12 > Console untuk detail.</small>
-          </td></tr>`;
+        console.error('❌ Init Error:', err);
+        document.getElementById('tableBody').innerHTML = `<tr><td colspan="7" class="text-center text-danger py-4">Gagal memuat: ${err.message}</td></tr>`;
       }
     });
   
+    // Muat 100 data terbaru (Default)
+    async function loadWarga() {
+      document.getElementById('tableBody').innerHTML = `<tr><td colspan="7" class="text-center py-4 text-muted"><div class="spinner-border spinner-border-sm"></div> Memuat...</td></tr>`;
+      const { data, error } = await db.from('warga')
+        .select('nik, nama_lengkap, jenis_kelamin_id, agama_id, pekerjaan_id, status_perkawinan_id, status_dasar_id, alamat, rt, rw')
+        .order('created_at', { ascending: false })
+        .limit(100);
+      if (error) throw error;
+      renderTable(data || []);
+    }
+  
+    // Cari langsung ke Database (Server-Side)
+    async function searchWarga(keyword) {
+      if (!keyword) return loadWarga(); // Jika kosong, kembali ke default
+      
+      document.getElementById('tableBody').innerHTML = `<tr><td colspan="7" class="text-center py-4 text-muted"><div class="spinner-border spinner-border-sm"></div> Mencari di database...</td></tr>`;
+      
+      try {
+        // Query langsung ke Supabase dengan ilike (case-insensitive)
+        const { data, error } = await db.from('warga')
+          .select('nik, nama_lengkap, jenis_kelamin_id, agama_id, pekerjaan_id, status_perkawinan_id, status_dasar_id, alamat, rt, rw')
+          .or(`nik.ilike.%${keyword}%,nama_lengkap.ilike.%${keyword}%,alamat.ilike.%${keyword}%`)
+          .order('created_at', { ascending: false })
+          .limit(200); // Batas hasil pencarian agar tetap cepat
+          
+        if (error) throw error;
+        
+        renderTable(data || []);
+        const emptyMsg = document.getElementById('emptyState');
+        emptyMsg.textContent = (data?.length === 0) ? 'Tidak ditemukan warga dengan kata kunci tersebut' : '';
+        emptyMsg.classList.toggle('d-none', data?.length > 0);
+      } catch (err) {
+        console.error('Search Error:', err);
+        alert('Gagal mencari: ' + err.message);
+        loadWarga();
+      }
+    }
+  
+    // Helper: Terjemahkan Kode -> Teks
     function getLabel(kat, id) {
       return (refMap[kat] && refMap[kat][id]) ? refMap[kat][id] : (id || '-');
     }
   
+    // Render Tabel
     function renderTable(data) {
       const tbody = document.getElementById('tableBody');
       const empty = document.getElementById('emptyState');
@@ -146,15 +178,6 @@
         </tr>
       `).join('');
     }
-  
-    // Fitur Pencarian Real-time
-    document.getElementById('searchInput').addEventListener('input', e => {
-      const q = e.target.value.toLowerCase();
-      const filtered = wargaList.filter(w => 
-        (w.nik||'').includes(q) || (w.nama_lengkap||'').toLowerCase().includes(q) || (w.alamat||'').toLowerCase().includes(q)
-      );
-      renderTable(filtered);
-    });
   </script>
 </body>
 </html>
