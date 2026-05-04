@@ -1,11 +1,3 @@
-// ==========================================
-// KONFIGURASI SUPABASE
-// Ganti dengan data project Anda
-// ==========================================
-const SUPABASE_URL = 'https://YOUR_PROJECT_ID.supabase.co';
-const SUPABASE_ANON_KEY = 'YOUR_ANON_KEY';
-
-// Inisialisasi client (hanya sekali)// ==========================================
 // KONFIGURASI SUPABASE
 // ⚠️ GANTI DENGAN DATA PROJECT ANDA
 // ==========================================
