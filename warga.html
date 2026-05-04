@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Data Warga - Aplikasi Desa</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css">
+  <style>
+    body { background: #f8f9fa; }
+    .sidebar { min-height: 100vh; background: #212529; color: white; position: sticky; top: 0; }
+    .sidebar a { color: rgba(255,255,255,0.8); text-decoration: none; padding: 10px 15px; display: block; border-radius: 4px; margin-bottom: 4px; }
+    .sidebar a:hover, .sidebar a.active { background: #0d6efd; color: white; }
+    .content { padding: 20px; }
+    .table th { font-weight: 600; font-size: 0.9rem; }
+    .table td { font-size: 0.95rem; }
+    .badge-status { font-size: 0.8rem; }
+  </style>
+</head>
+<body>
+  <div class="container-fluid">
+    <div class="row">
+      <!-- Sidebar -->
+      <div class="col-md-2 sidebar p-3 d-none d-md-block">
+        <h5 class="mb-4">🏘️ Aplikasi Desa</h5>
+        <nav>
+          <a href="dashboard.html"><i class="bi bi-house me-2"></i>Dashboard</a>
+          <a href="warga.html" class="active"><i class="bi bi-people me-2"></i>Data Warga</a>
+          <a href="#"><i class="bi bi-file-earmark-text me-2"></i>Surat Menyurat</a>
+          <a href="#"><i class="bi bi-gear me-2"></i>Pengaturan</a>
+        </nav>
+        <hr>
+        <div class="small" id="userInfo">Memuat profil...</div>
+        <button class="btn btn-sm btn-outline-light mt-2 w-100" onclick="logout()">Logout</button>
+      </div>
+
+      <!-- Main Content -->
+      <div class="col-md-10 content">
+        <div class="d-flex flex-wrap justify-content-between align-items-center mb-4 gap-2">
+          <h4 class="mb-0"><i class="bi bi-people-fill me-2"></i>Data Warga</h4>
+          <button class="btn btn-primary" onclick="alert('Fitur tambah warga akan segera hadir!')">
+            <i class="bi bi-plus-lg me-1"></i> Tambah Warga
+          </button>
+        </div>
+
+        <div class="card shadow-sm">
+          <div class="card-body">
+            <input type="text" id="searchInput" class="form-control mb-3" placeholder=" Cari berdasarkan NIK, Nama, atau Alamat...">
+            
+            <div class="table-responsive">
+              <table class="table table-hover align-middle mb-0" id="wargaTable">
+                <thead class="table-light">
+                  <tr>
+                    <th width="15%">NIK</th>
+                    <th width="20%">Nama Lengkap</th>
+                    <th width="8%">L/P</th>
+                    <th width="12%">Agama</th>
+                    <th width="15%">Pekerjaan</th>
+                    <th width="10%">Status</th>
+                    <th width="15%">Alamat</th>
+                    <th width="5%">Aksi</th>
+                  </tr>
+                </thead>
+                <tbody id="tableBody">
+                  <tr><td colspan="8" class="text-center py-4 text-muted"><div class="spinner-border spinner-border-sm me-2"></div> Memuat data warga...</td></tr>
+                </tbody>
+              </table>
+            </div>
+
+            <div id="emptyState" class="text-center py-5 d-none">
+              <i class="bi bi-inbox fs-1 text-muted"></i>
+              <p class="text-muted mt-2 mb-0">Tidak ada data yang sesuai dengan pencarian</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="app.js"></script>
+  <script>
+    // Inisialisasi ulang jika app.js belum load
+    const supabase = window.supabase || window.supabase.createClient(
+      'https://ogrboadxaeymeqsksdau.supabase.co',
+      'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9ncmJvYWR4YWV5bWVxc2tzZGF1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU4NzczNDAsImV4cCI6MjA5MTQ1MzM0MH0.liLIar3JdLuYq2ni0ANKHL4z0MJ8mP01MVS9eEt3EoU'
+    );
+
+    let refMap = {};
+    let wargaData = [];
+
+    document.addEventListener('DOMContentLoaded', async () => {
+      // 1. Proteksi: Cek sesi
+      const {  { session } } = await supabase.auth.getSession();
+      if (!session) {
+        window.location.href = 'index.html';
+        return;
+      }
+
+      // 2. Tampilkan info user
+      const { data: profile } = await supabase.from('users_profile').select('nama_lengkap, role').eq('id', session.user.id).single();
+      if (profile) {
+        document.getElementById('userInfo').innerHTML = `<strong>${profile.nama_lengkap}</strong><br><small class="text-muted">${profile.role}</small>`;
+      }
+
+      // 3. Load referensi & data warga
+      await loadRefMaster();
+      await loadWarga();
+      
+      // 4. Setup pencarian
+      document.getElementById('searchInput').addEventListener('input', handleSearch);
+    });
+
+    async function loadRefMaster() {
+      const { data, error } = await supabase.from('ref_master').select('kategori, kode_asli, label');
+      if (error) return console.error('Gagal load ref_master:', error);
+      
+      // Bangun map cepat: refMap['agama'][1] = 'Islam'
+      data.forEach(row => {
+        if (!refMap[row.kategori]) refMap[row.kategori] = {};
+        refMap[row.kategori][row.kode_asli] = row.label;
+      });
+    }
+
+    async function loadWarga() {
+      const { data, error } = await supabase
+        .from('warga')
+        .select('nik, nama_lengkap, jenis_kelamin_id, agama_id, pekerjaan_id, status_perkawinan_id, status_dalam_kk_id, status_dasar_id, alamat, rt, rw')
+        .order('created_at', { ascending: false })
+        .limit(150);
+
+      if (error) {
+        document.getElementById('tableBody').innerHTML = `<tr><td colspan="8" class="text-center text-danger">Gagal memuat data: ${error.message}</td></tr>`;
+        return;
+      }
+
+      wargaData = data || [];
+      renderTable(wargaData);
+    }
+
+    function getLabel(kategori, id) {
+      return (refMap[kategori] && refMap[kategori][id]) ? refMap[kategori][id] : (id || '-');
+    }
+
+    function renderTable(data) {
+      const tbody = document.getElementById('tableBody');
+      const emptyState = document.getElementById('emptyState');
+      
+      if (data.length === 0) {
+        tbody.innerHTML = '';
+        emptyState.classList.remove('d-none');
+        return;
+      }
+      emptyState.classList.add('d-none');
+
+      tbody.innerHTML = data.map(w => `
+        <tr>
+          <td class="font-monospace small">${w.nik || '-'}</td>
+          <td class="fw-medium">${w.nama_lengkap || '-'}</td>
+          <td>${getLabel('jenis_kelamin', w.jenis_kelamin_id)}</td>
+          <td>${getLabel('agama', w.agama_id)}</td>
+          <td class="small">${getLabel('pekerjaan', w.pekerjaan_id)}</td>
+          <td><span class="badge bg-secondary badge-status">${getLabel('status_dasar', w.status_dasar_id)}</span></td>
+          <td class="small text-muted">${[w.alamat, 'RT'+w.rt, 'RW'+w.rw].filter(Boolean).join(', ') || '-'}</td>
+          <td><button class="btn btn-sm btn-outline-primary" onclick="alert('Detail & Edit warga ${w.nik} akan segera hadir!')"><i class="bi bi-eye"></i></button></td>
+        </tr>
+      `).join('');
+    }
+
+    function handleSearch(e) {
+      const keyword = e.target.value.toLowerCase().trim();
+      if (!keyword) return renderTable(wargaData);
+
+      const filtered = wargaData.filter(w => 
+        (w.nik && w.nik.includes(keyword)) ||
+        (w.nama_lengkap && w.nama_lengkap.toLowerCase().includes(keyword)) ||
+        (w.alamat && w.alamat.toLowerCase().includes(keyword)) ||
+        (w.rt && w.rt.includes(keyword)) ||
+        (w.rw && w.rw.includes(keyword))
+      );
+      renderTable(filtered);
+    }
+  </script>
+</body>
+</html>
