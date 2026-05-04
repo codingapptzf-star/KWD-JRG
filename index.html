@@ -23,14 +23,17 @@
       <p class="text-muted small mb-0">Silakan login untuk melanjutkan</p>
     </div>
     
-    <form id="loginForm">
+    <!-- Tambahkan atribut name="loginForm" pada form -->
+    <form id="loginForm" name="loginForm" novalidate>
       <div class="mb-3">
         <label for="email" class="form-label fw-medium">Email</label>
-        <input type="email" class="form-control form-control-lg" id="email" required placeholder="admin@desa.go.id">
+        <!-- Tambahkan autocomplete dan name="email" -->
+        <input type="email" class="form-control form-control-lg" id="email" name="email" autocomplete="email" required placeholder="admin@desa.go.id">
       </div>
       <div class="mb-3">
         <label for="password" class="form-label fw-medium">Password</label>
-        <input type="password" class="form-control form-control-lg" id="password" required placeholder="••••••••">
+        <!-- Tambahkan autocomplete dan name="password" -->
+        <input type="password" class="form-control form-control-lg" id="password" name="current-password" autocomplete="current-password" required placeholder="••••••••">
       </div>
       <div class="d-grid gap-2">
         <button type="submit" class="btn btn-primary btn-lg" id="btnLogin">Masuk</button>
